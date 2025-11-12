@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, CasterError>;
+pub type CasterResult<T> = std::result::Result<T, CasterError>;
 
 #[derive(Error, Debug)]
 pub enum CasterError {
@@ -27,10 +28,11 @@ pub enum CasterError {
     
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
-    
-    #[error("GStreamer error: {0}")]
-    GStreamer(#[from] gstreamer::glib::Error),
-    
+
+    // GStreamer support disabled for now
+    // #[error("GStreamer error: {0}")]
+    // GStreamer(#[from] gstreamer::glib::Error),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

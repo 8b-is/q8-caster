@@ -28,10 +28,23 @@ pub struct CastSession {
 pub enum ContentType {
     Markdown { theme: Option<String> },
     Video { codec: String, container: String },
+    Audio { codec: String, format: String },
     Image { format: String },
+    Pdf { page: Option<u32> },
     Model3D { format: String },
     Stream { protocol: StreamProtocol },
     Presentation { format: String },
+    ScreenMirror { source_display: Option<String>, quality: MirrorQuality },
+    WebAssembly { module_url: String, entry_point: Option<String> },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MirrorQuality {
+    Low,      // 720p @ 30fps
+    Medium,   // 1080p @ 30fps
+    High,     // 1080p @ 60fps
+    Ultra,    // 4K @ 60fps
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

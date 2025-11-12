@@ -28,24 +28,27 @@ base64 = "0.22"
 toml = "0.8"  # For config files
 secrecy = { version = "0.10", features = ["serde"] }  # Secure secret handling
 
-# Display Control (disabled for now)
-# winit = "0.30"
-# wgpu = "23"
-# raw-window-handle = "0.6"
+# Display Control & UI
+winit = "0.30"
+egui = "0.29"
+egui-wgpu = "0.29"
+egui-winit = "0.29"
+wgpu = "22.1"  # Match egui-wgpu version
+raw-window-handle = "0.6"
+pollster = "0.3"  # For blocking on async in winit
 
-# Media Processing
-gstreamer = "0.23"
-gstreamer-app = "0.23"
-gstreamer-video = "0.23"
-gstreamer-audio = "0.23"
-gstreamer-rtsp = "0.23"
-gstreamer-rtsp-server = "0.23"
+# Media Processing (disabled for now - requires system gstreamer libraries)
+# gstreamer = "0.23"
+# gstreamer-app = "0.23"
+# gstreamer-video = "0.23"
+# gstreamer-audio = "0.23"
+# gstreamer-rtsp = "0.23"
+# gstreamer-rtsp-server = "0.23"
 
-# Markdown Rendering
-comrak = "0.29"
-# egui = "0.29"
-# egui-wgpu = "0.29"
-# egui-winit = "0.29"
+# Document Rendering
+comrak = "0.29"  # Markdown
+pdf = "0.9"  # PDF parsing
+pdfium-render = "0.8"  # PDF rendering
 
 # Network Protocols
 mdns-sd = "0.12"
@@ -54,6 +57,15 @@ rust_cast = "0.18"  # More maintained Chromecast library
 
 # 3D Rendering (disabled for now)
 # bevy = { version = "0.15", default-features = false, features = ["bevy_render", "bevy_winit", "bevy_asset", "bevy_scene", "bevy_gltf"] }
+
+# WebAssembly Support (disabled for now - needs API update)
+# wasmer = "3.1"
+# wasmer-wasi = "3.1"
+# wat = "1"  # For WASM testing
+
+# Screen Capture (for mirroring)
+scrap = "0.5"  # Screen capture
+xcap = "0.0.9"  # Cross-platform screen capture
 
 # Utilities
 anyhow = "1"
