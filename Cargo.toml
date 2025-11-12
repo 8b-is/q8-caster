@@ -87,6 +87,7 @@ clap = { version = "4", features = ["derive"] }
 lazy_static = "1"
 tokio-stream = "0.1"
 libc = "0.2"
+url = "2"
 
 [build-dependencies]
 cbindgen = "0.27"

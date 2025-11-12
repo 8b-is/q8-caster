@@ -190,7 +190,6 @@ pub async fn cache_content_handler(_server: Arc<McpServer>, args: &Value) -> jso
         "note": "Cache storage not yet fully implemented; TTL support pending"
     }))
 }
-}
 
 pub async fn get_cast_status_handler(_server: Arc<McpServer>, args: &Value) -> jsonrpc_core::Result<Value> {
     let display_id = args["display_id"].as_str();
@@ -289,9 +288,9 @@ pub async fn control_chromecast_handler(server: Arc<McpServer>, args: &Value) ->
     let device_name = args["device_name"].as_str().unwrap_or("");
     let action = args["action"].as_str().unwrap_or("");
     let _value = args["value"].as_f64();
-    
+
     info!("Controlling Chromecast {} - action: {}", device_name, action);
-    
+
     match action {
         "stop" => {
             let mut network_receiver = server.network_receiver.write().await;
@@ -312,4 +311,108 @@ pub async fn control_chromecast_handler(server: Arc<McpServer>, args: &Value) ->
             "error": format!("Unknown action: {}", action)
         }))
     }
+}
+
+pub async fn discover_devices_handler(server: Arc<McpServer>, args: &Value) -> jsonrpc_core::Result<Value> {
+    use crate::network::DeviceType;
+
+    info!("Discovering network devices...");
+
+    // Parse optional device type filter
+    let device_type_filter = args["device_type"].as_str();
+
+    let network_receiver = server.network_receiver.read().await;
+
+    let devices = if let Some(type_str) = device_type_filter {
+        let device_type = match type_str {
+            "chromecast" => DeviceType::Chromecast,
+            "firetv" | "fire_tv" => DeviceType::FireTv,
+            "airplay" => DeviceType::AirPlay,
+            "dlna" => DeviceType::Dlna,
+            "upnp" => DeviceType::Upnp,
+            "miracast" => DeviceType::Miracast,
+            _ => DeviceType::Custom(type_str.to_string()),
+        };
+        network_receiver.get_discovered_devices_by_type(&device_type)
+    } else {
+        network_receiver.get_discovered_devices()
+    };
+
+    let devices_json: Vec<Value> = devices.iter().map(|device| {
+        json!({
+            "id": device.id,
+            "name": device.name,
+            "device_type": device.device_type,
+            "ip": device.ip.to_string(),
+            "port": device.port,
+            "capabilities": {
+                "can_video": device.capabilities.can_video,
+                "can_audio": device.capabilities.can_audio,
+                "can_image": device.capabilities.can_image,
+                "can_mirror": device.capabilities.can_mirror,
+                "supported_codecs": device.capabilities.supported_codecs,
+                "max_resolution": device.capabilities.max_resolution,
+                "protocols": device.capabilities.protocols,
+            },
+            "discovered_at": device.discovered_at.to_rfc3339(),
+            "last_seen": device.last_seen.to_rfc3339(),
+            "metadata": device.metadata,
+        })
+    }).collect();
+
+    Ok(json!({
+        "success": true,
+        "count": devices.len(),
+        "devices": devices_json
+    }))
+}
+
+pub async fn get_device_handler(server: Arc<McpServer>, args: &Value) -> jsonrpc_core::Result<Value> {
+    let device_id = args["device_id"].as_str().unwrap_or("");
+
+    info!("Getting device info for: {}", device_id);
+
+    let network_receiver = server.network_receiver.read().await;
+
+    if let Some(device) = network_receiver.get_discovered_device(device_id) {
+        Ok(json!({
+            "success": true,
+            "device": {
+                "id": device.id,
+                "name": device.name,
+                "device_type": device.device_type,
+                "ip": device.ip.to_string(),
+                "port": device.port,
+                "capabilities": {
+                    "can_video": device.capabilities.can_video,
+                    "can_audio": device.capabilities.can_audio,
+                    "can_image": device.capabilities.can_image,
+                    "can_mirror": device.capabilities.can_mirror,
+                    "supported_codecs": device.capabilities.supported_codecs,
+                    "max_resolution": device.capabilities.max_resolution,
+                    "protocols": device.capabilities.protocols,
+                },
+                "discovered_at": device.discovered_at.to_rfc3339(),
+                "last_seen": device.last_seen.to_rfc3339(),
+                "metadata": device.metadata,
+            }
+        }))
+    } else {
+        Ok(json!({
+            "success": false,
+            "error": format!("Device not found: {}", device_id)
+        }))
+    }
+}
+
+pub async fn discovery_status_handler(server: Arc<McpServer>, _args: &Value) -> jsonrpc_core::Result<Value> {
+    let network_receiver = server.network_receiver.read().await;
+    let is_running = network_receiver.is_discovery_running().await;
+    let device_count = network_receiver.get_discovered_devices().len();
+
+    Ok(json!({
+        "success": true,
+        "discovery_running": is_running,
+        "device_count": device_count
+    }))
 }
