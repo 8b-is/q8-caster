@@ -193,6 +193,42 @@ impl McpServer {
                             },
                             "required": ["device_name", "action"]
                         }
+                    },
+                    {
+                        "name": "discover_devices",
+                        "description": "Discover all network devices (Chromecast, FireTV, AirPlay, DLNA, UPnP) via mDNS, Bonjour, and SSDP",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "device_type": {
+                                    "type": "string",
+                                    "enum": ["chromecast", "firetv", "fire_tv", "airplay", "dlna", "upnp", "miracast"],
+                                    "description": "Optional: Filter by device type. If not specified, returns all discovered devices."
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "name": "get_device",
+                        "description": "Get detailed information about a specific discovered device",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "device_id": {
+                                    "type": "string",
+                                    "description": "The ID of the device to retrieve"
+                                }
+                            },
+                            "required": ["device_id"]
+                        }
+                    },
+                    {
+                        "name": "discovery_status",
+                        "description": "Get the current status of device discovery",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {}
+                        }
                     }
                 ]
             }))
@@ -223,6 +259,9 @@ impl McpServer {
                     "connect_chromecast" => connect_chromecast_handler(server, arguments).await,
                     "cast_to_chromecast" => cast_to_chromecast_handler(server, arguments).await,
                     "control_chromecast" => control_chromecast_handler(server, arguments).await,
+                    "discover_devices" => discover_devices_handler(server, arguments).await,
+                    "get_device" => get_device_handler(server, arguments).await,
+                    "discovery_status" => discovery_status_handler(server, arguments).await,
                     _ => Ok(json!({"error": format!("Unknown tool: {}", tool_name)}))
                 }
             }

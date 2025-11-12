@@ -1,4 +1,8 @@
 pub mod chromecast_simple;
+pub mod discovery;
+
+// Re-export commonly used types
+pub use discovery::{DeviceDiscovery, DeviceType, DiscoveredDevice, DeviceCapabilities};
 
 use mdns_sd::{ServiceDaemon, ServiceInfo};
 // Removed unused imports - SearchTarget and URN were just window shopping here!
@@ -14,6 +18,7 @@ pub struct NetworkReceiver {
     tcp_listener: Option<TcpListener>,
     protocols: Vec<String>,
     chromecast_manager: ChromecastManager,
+    device_discovery: DeviceDiscovery,
 }
 
 impl NetworkReceiver {
@@ -23,23 +28,24 @@ impl NetworkReceiver {
             tcp_listener: None,
             protocols: Vec::new(),
             chromecast_manager: ChromecastManager::new(),
+            device_discovery: DeviceDiscovery::new(),
         })
     }
     
     pub async fn start(&mut self, protocols: Vec<String>, port: u16) -> Result<()> {
         self.protocols = protocols.clone();
-        
+
         // Start TCP listener
         let addr = SocketAddr::from(([0, 0, 0, 0], port));
         let listener = TcpListener::bind(addr).await
             .map_err(|e| CasterError::Network(format!("Failed to bind to port {}: {}", port, e)))?;
-        
+
         self.tcp_listener = Some(listener);
-        
+
         // Start mDNS for service discovery
         let mdns = ServiceDaemon::new()
             .map_err(|e| CasterError::Network(format!("Failed to create mDNS daemon: {}", e)))?;
-        
+
         for protocol in &protocols {
             match protocol.as_str() {
                 "airplay" => self.register_airplay(&mdns, port)?,
@@ -48,11 +54,21 @@ impl NetworkReceiver {
                 _ => {}
             }
         }
-        
+
         self.mdns = Some(mdns);
-        
+
+        // Start device discovery for all supported device types
+        let device_types = vec![
+            DeviceType::Chromecast,
+            DeviceType::FireTv,
+            DeviceType::AirPlay,
+            DeviceType::Dlna,
+        ];
+
+        self.device_discovery.start(device_types).await?;
+
         info!("Network receiver started on port {} with protocols: {:?}", port, protocols);
-        
+
         Ok(())
     }
     
@@ -112,14 +128,17 @@ impl NetworkReceiver {
     }
     
     pub async fn stop(&mut self) -> Result<()> {
+        // Stop device discovery
+        self.device_discovery.stop().await?;
+
         if let Some(mdns) = self.mdns.take() {
             mdns.shutdown()
                 .map_err(|e| CasterError::Network(format!("Failed to shutdown mDNS: {}", e)))?;
         }
-        
+
         self.tcp_listener = None;
         self.protocols.clear();
-        
+
         Ok(())
     }
     
@@ -149,5 +168,22 @@ impl NetworkReceiver {
     
     pub async fn get_chromecast_status(&self, device_name: &str) -> Result<serde_json::Value> {
         self.chromecast_manager.get_device_status(device_name).await
+    }
+
+    // Device discovery methods
+    pub fn get_discovered_devices(&self) -> Vec<DiscoveredDevice> {
+        self.device_discovery.get_devices()
+    }
+
+    pub fn get_discovered_devices_by_type(&self, device_type: &DeviceType) -> Vec<DiscoveredDevice> {
+        self.device_discovery.get_devices_by_type(device_type)
+    }
+
+    pub fn get_discovered_device(&self, id: &str) -> Option<DiscoveredDevice> {
+        self.device_discovery.get_device(id)
+    }
+
+    pub async fn is_discovery_running(&self) -> bool {
+        self.device_discovery.is_running().await
     }
 }
