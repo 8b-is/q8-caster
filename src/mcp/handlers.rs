@@ -176,7 +176,8 @@ pub async fn stop_cast_handler(_server: Arc<McpServer>, args: &Value) -> jsonrpc
 pub async fn cache_content_handler(_server: Arc<McpServer>, args: &Value) -> jsonrpc_core::Result<Value> {
     let key = args["key"].as_str().unwrap_or("");
     let source = args["source"].as_str().unwrap_or("");
-    let _ttl = args["ttl"].as_u64().map(|t| std::time::Duration::from_secs(t));
+    // Note: TTL support is not yet implemented in the cache system
+    // Future implementation should add expiration tracking to CachedContent
 
     info!("Caching content: {} -> {}", source, key);
 
@@ -186,8 +187,9 @@ pub async fn cache_content_handler(_server: Arc<McpServer>, args: &Value) -> jso
     Ok(json!({
         "success": true,
         "key": key,
-        "note": "Cache storage not yet fully implemented"
+        "note": "Cache storage not yet fully implemented; TTL support pending"
     }))
+}
 }
 
 pub async fn get_cast_status_handler(_server: Arc<McpServer>, args: &Value) -> jsonrpc_core::Result<Value> {

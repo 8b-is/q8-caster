@@ -15,6 +15,7 @@ pub use mirror::ScreenMirror;
 
 pub struct RenderEngine {
     pdf_renderer: Option<PdfRenderer>,
+    pdf_init_error: Option<String>,
     audio_renderer: AudioRenderer,
     wasm_runner: WasmRunner,
     screen_mirror: Option<ScreenMirror>,
@@ -24,6 +25,7 @@ impl RenderEngine {
     pub async fn new() -> Result<Self> {
         Ok(Self {
             pdf_renderer: None,
+            pdf_init_error: None,
             audio_renderer: AudioRenderer::new(),
             wasm_runner: WasmRunner::new()?,
             screen_mirror: None,
@@ -65,8 +67,24 @@ impl RenderEngine {
     }
 
     pub fn render_pdf(&mut self, data: &[u8], page: u32) -> Result<DynamicImage> {
+        // If we previously failed to initialize, return that error
+        if let Some(ref error) = self.pdf_init_error {
+            return Err(CasterError::Render(format!("PDF renderer initialization failed: {}", error)));
+        }
+        
+        // Try to initialize PDF renderer if not already done
         if self.pdf_renderer.is_none() {
-            self.pdf_renderer = Some(PdfRenderer::new()?);
+            match PdfRenderer::new() {
+                Ok(renderer) => {
+                    self.pdf_renderer = Some(renderer);
+                }
+                Err(e) => {
+                    // Store the error to avoid repeated initialization attempts
+                    let error_msg = e.to_string();
+                    self.pdf_init_error = Some(error_msg.clone());
+                    return Err(CasterError::Render(format!("Failed to initialize PDF renderer: {}", error_msg)));
+                }
+            }
         }
 
         if let Some(ref mut renderer) = self.pdf_renderer {
