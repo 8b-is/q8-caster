@@ -1,5 +1,8 @@
 use crate::{Result, CasterError, DisplayInfo, Resolution, Position};
 
+pub mod window;
+pub use window::{CastWindow, run_cast_window};
+
 pub struct DisplayManager {
     displays: Vec<DisplayInfo>,
 }
