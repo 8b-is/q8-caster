@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "q8-caster": {
+      "command": "/home/hue/source/q8-caster/target/release/q8-caster",
+      "args": [],
+      "env": {
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}

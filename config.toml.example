@@ -1,0 +1,27 @@
+# Q8-Caster Configuration File
+# Copy this to config.toml and update with your settings
+
+[keycloak]
+# Your Keycloak realm
+realm = "master"
+
+# Keycloak server URL (without /auth suffix)
+auth_server_url = "http://localhost:8080"
+
+# Client ID configured in Keycloak
+client_id = "q8-caster"
+
+# Client secret (optional for public clients)
+# client_secret = "your-client-secret"
+
+# Redirect URI (must match Keycloak client configuration)
+redirect_uri = "http://localhost:8420/auth/callback"
+
+# OAuth2 scopes to request
+scope = ["openid", "profile", "email"]
+
+# Environment variable name for encryption key
+encryption_key_env = "Q8_CASTER_ENCRYPTION_KEY"
+
+# Directory to store encrypted secrets
+secrets_dir = "/etc/q8-caster/secrets"

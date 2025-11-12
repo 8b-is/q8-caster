@@ -1,0 +1,44 @@
+[Unit]
+Description=Q8-Caster Display Control Server
+After=network.target display-manager.service
+Wants=display-manager.service
+
+[Service]
+Type=simple
+# Run as root for display control permissions
+User=root
+Group=root
+
+# Working directory
+WorkingDirectory=/opt/q8-caster
+
+# Start command with elevated mode
+ExecStart=/opt/q8-caster/q8-caster --elevated --port 8420
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+
+# Environment
+Environment="RUST_LOG=info"
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/run/user/1000/gdm/Xauthority"
+# Encryption key for secrets - generate with: openssl rand -base64 32
+Environment="Q8_CASTER_ENCRYPTION_KEY=YOUR_BASE64_ENCODED_32_BYTE_KEY"
+
+# Security settings - balance between security and functionality
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/q8-caster/cache /var/log/q8-caster /etc/q8-caster/secrets
+
+# Allow access to display and audio
+SupplementaryGroups=video audio input
+
+# Capabilities for display control
+AmbientCapabilities=CAP_SYS_ADMIN
+CapabilityBoundingSet=CAP_SYS_ADMIN
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q8-Caster Dashboard</title>
+    <style>
+        :root {
+            --bg-primary: #1e1e1e;
+            --bg-secondary: #2a2a2a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent: #58a6ff;
+            --success: #4caf50;
+            --error: #f44336;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: var(--bg-secondary);
+            padding: 20px 0;
+            margin-bottom: 30px;
+            border-bottom: 2px solid var(--accent);
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            color: var(--accent);
+            text-align: center;
+        }
+        
+        .status {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-connected {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+        
+        .status-disconnected {
+            background: var(--error);
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #333;
+        }
+        
+        .card h2 {
+            color: var(--accent);
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        
+        .display-list, .device-list {
+            list-style: none;
+        }
+        
+        .display-item, .device-item {
+            background: var(--bg-primary);
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.2s;
+        }
+        
+        button:hover {
+            opacity: 0.8;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .events-log {
+            background: #000;
+            color: #0f0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            padding: 15px;
+            border-radius: 4px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        
+        .event-item {
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+        
+        .event-item.new {
+            opacity: 1;
+            color: #0ff;
+        }
+        
+        .controls {
+            margin-top: 20px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 8px;
+            background: var(--bg-primary);
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: var(--text-primary);
+        }
+        
+        .emoji {
+            margin-right: 8px;
+        }
+        
+        .auth-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--bg-secondary);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .user-info {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .auth-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.2s;
+        }
+        
+        .auth-btn:hover {
+            opacity: 0.8;
+        }
+        
+        .auth-btn.logout {
+            background: var(--error);
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-status" id="authStatus">
+        <span class="user-info" id="userInfo">Not logged in</span>
+        <button class="auth-btn logout" id="logoutBtn" style="display: none;">Logout</button>
+        <button class="auth-btn" id="loginBtn">Login with Keycloak</button>
+    </div>
+    
+    <header>
+        <div class="container">
+            <h1>🎬 Q8-Caster Control Panel</h1>
+            <div class="status">
+                <span class="status-indicator status-disconnected" id="status"></span>
+                <span id="status-text">Connecting...</span>
+            </div>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="grid">
+            <div class="card">
+                <h2><span class="emoji">🖥️</span>Displays</h2>
+                <ul class="display-list" id="displays">
+                    <li class="display-item">Loading...</li>
+                </ul>
+                <button onclick="refreshDisplays()">Refresh</button>
+            </div>
+            
+            <div class="card">
+                <h2><span class="emoji">📺</span>Chromecast Devices</h2>
+                <ul class="device-list" id="chromecasts">
+                    <li class="device-item">No devices found</li>
+                </ul>
+                <button onclick="discoverChromecasts()">Discover</button>
+            </div>
+            
+            <div class="card">
+                <h2><span class="emoji">🎥</span>Quick Cast</h2>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>Content Type</label>
+                        <select id="content-type">
+                            <option value="markdown">Markdown</option>
+                            <option value="video">Video</option>
+                            <option value="image">Image</option>
+                            <option value="stream">Stream</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Source URL/Path</label>
+                        <input type="text" id="source" placeholder="https://example.com/video.mp4">
+                    </div>
+                    <button onclick="castContent()">Cast</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2><span class="emoji">📡</span>Live Events</h2>
+            <div class="events-log" id="events-log">
+                <div class="event-item">Waiting for events...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        let eventSource = null;
+        let authToken = localStorage.getItem('q8_caster_token');
+        
+        // Authentication UI elements
+        const authStatus = document.getElementById('authStatus');
+        const userInfo = document.getElementById('userInfo');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        
+        // Check authentication status
+        async function checkAuth() {
+            if (!authToken) {
+                showLoggedOut();
+                return;
+            }
+            
+            try {
+                const response = await fetch('/auth/userinfo', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showLoggedIn(data.user);
+                } else {
+                    localStorage.removeItem('q8_caster_token');
+                    authToken = null;
+                    showLoggedOut();
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                showLoggedOut();
+            }
+        }
+        
+        function showLoggedIn(user) {
+            userInfo.textContent = `Logged in as: ${user.preferred_username || user.email || user.sub}`;
+            loginBtn.style.display = 'none';
+            logoutBtn.style.display = 'inline-block';
+        }
+        
+        function showLoggedOut() {
+            userInfo.textContent = 'Not logged in';
+            loginBtn.style.display = 'inline-block';
+            logoutBtn.style.display = 'none';
+        }
+        
+        // Login handler
+        loginBtn.addEventListener('click', () => {
+            window.location.href = '/auth/login';
+        });
+        
+        // Logout handler
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                await fetch('/auth/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            
+            localStorage.removeItem('q8_caster_token');
+            authToken = null;
+            showLoggedOut();
+        });
+        
+        // Add auth header to all API calls
+        async function authFetch(url, options = {}) {
+            if (authToken) {
+                options.headers = {
+                    ...options.headers,
+                    'Authorization': `Bearer ${authToken}`
+                };
+            }
+            return fetch(url, options);
+        }
+        
+        // Initialize SSE connection
+        function connectSSE() {
+            eventSource = new EventSource(`${API_BASE}/events`);
+            
+            eventSource.onopen = () => {
+                updateStatus(true);
+                addEvent('Connected to server');
+            };
+            
+            eventSource.onerror = () => {
+                updateStatus(false);
+                addEvent('Connection lost, reconnecting...');
+            };
+            
+            eventSource.addEventListener('cast-event', (e) => {
+                const event = JSON.parse(e.data);
+                handleCastEvent(event);
+            });
+            
+            eventSource.addEventListener('keep-alive', () => {
+                // Heartbeat
+            });
+        }
+        
+        function updateStatus(connected) {
+            const indicator = document.getElementById('status');
+            const text = document.getElementById('status-text');
+            
+            if (connected) {
+                indicator.className = 'status-indicator status-connected';
+                text.textContent = 'Connected';
+            } else {
+                indicator.className = 'status-indicator status-disconnected';
+                text.textContent = 'Disconnected';
+            }
+        }
+        
+        function addEvent(message) {
+            const log = document.getElementById('events-log');
+            const item = document.createElement('div');
+            item.className = 'event-item new';
+            item.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.insertBefore(item, log.firstChild);
+            
+            // Remove 'new' class after animation
+            setTimeout(() => item.classList.remove('new'), 1000);
+            
+            // Keep only last 50 events
+            while (log.children.length > 50) {
+                log.removeChild(log.lastChild);
+            }
+        }
+        
+        function handleCastEvent(event) {
+            switch (event.type) {
+                case 'cast_started':
+                    addEvent(`Cast started on ${event.display_id}: ${event.content_type}`);
+                    break;
+                case 'cast_stopped':
+                    addEvent(`Cast stopped on ${event.display_id}`);
+                    break;
+                case 'chromecast_discovered':
+                    addEvent(`Found ${event.devices.length} Chromecast devices`);
+                    updateChromecastList(event.devices);
+                    break;
+                case 'error':
+                    addEvent(`Error: ${event.message}`);
+                    break;
+                default:
+                    addEvent(`Event: ${event.type}`);
+            }
+        }
+        
+        async function refreshDisplays() {
+            try {
+                const response = await authFetch(`${API_BASE}/api/displays`);
+                const data = await response.json();
+                
+                const list = document.getElementById('displays');
+                list.innerHTML = '';
+                
+                data.displays.forEach(display => {
+                    const item = document.createElement('li');
+                    item.className = 'display-item';
+                    item.innerHTML = `
+                        <div>
+                            <strong>${display.name}</strong><br>
+                            <small>${display.resolution.width}x${display.resolution.height} @ ${display.refresh_rate}Hz</small>
+                        </div>
+                        <button onclick="castToDisplay('${display.id}')">Cast</button>
+                    `;
+                    list.appendChild(item);
+                });
+                
+                addEvent(`Found ${data.displays.length} displays`);
+            } catch (error) {
+                addEvent(`Failed to refresh displays: ${error.message}`);
+            }
+        }
+        
+        async function discoverChromecasts() {
+            try {
+                const response = await authFetch(`${API_BASE}/api/chromecast/discover`);
+                const data = await response.json();
+                updateChromecastList(data.devices);
+            } catch (error) {
+                addEvent(`Failed to discover Chromecasts: ${error.message}`);
+            }
+        }
+        
+        function updateChromecastList(devices) {
+            const list = document.getElementById('chromecasts');
+            list.innerHTML = '';
+            
+            if (devices.length === 0) {
+                list.innerHTML = '<li class="device-item">No devices found</li>';
+                return;
+            }
+            
+            devices.forEach(device => {
+                const item = document.createElement('li');
+                item.className = 'device-item';
+                item.innerHTML = `
+                    <div>
+                        <strong>${device.name}</strong><br>
+                        <small>${device.ip}</small>
+                    </div>
+                    <button onclick="connectChromecast('${device.name}')">Connect</button>
+                `;
+                list.appendChild(item);
+            });
+        }
+        
+        async function castContent() {
+            const contentType = document.getElementById('content-type').value;
+            const source = document.getElementById('source').value;
+            
+            if (!source) {
+                alert('Please enter a source URL or path');
+                return;
+            }
+            
+            try {
+                const response = await authFetch(`${API_BASE}/api/displays/display_0/cast`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content_type: contentType,
+                        source: source,
+                        options: {}
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    addEvent(`Cast started: ${contentType} from ${source}`);
+                }
+            } catch (error) {
+                addEvent(`Failed to cast: ${error.message}`);
+            }
+        }
+        
+        async function castToDisplay(displayId) {
+            const source = prompt('Enter source URL or path:');
+            if (!source) return;
+            
+            // Similar to castContent but with specific display
+        }
+        
+        async function connectChromecast(deviceName) {
+            try {
+                const response = await authFetch(`${API_BASE}/api/chromecast/${encodeURIComponent(deviceName)}/connect`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    addEvent(`Connected to ${deviceName}`);
+                }
+            } catch (error) {
+                addEvent(`Failed to connect: ${error.message}`);
+            }
+        }
+        
+        // Initialize on load
+        checkAuth();
+        connectSSE();
+        refreshDisplays();
+    </script>
+</body>
+</html>
