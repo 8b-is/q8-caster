@@ -9,7 +9,7 @@ use winit::{
     window::Window,
 };
 
-use crate::{error::CasterResult, ContentType};
+use crate::{error::Result as CasterResult, ContentType};
 
 /// egui-based display window for casting content
 pub struct CastWindow {
@@ -24,12 +24,21 @@ pub struct CastWindow {
     playback_state: PlaybackState,
     volume: f32,
     seek_position: f32,
+    duration: Option<u64>, // Duration in seconds
 
     // Content rendering
     content_texture: Option<wgpu::Texture>,
     content_data: Vec<u8>,
+    
+    // Redraw tracking
+    needs_redraw: bool,
 }
 
+/// WGPU rendering state for the window.
+/// 
+/// The `Surface` has a `'static` lifetime because it is created from an `Arc<Window>` 
+/// which is also stored with the same lifetime. This coupling is implicit but safe
+/// since both the window and surface are owned by the same `CastWindow` instance.
 struct WgpuState {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -57,8 +66,10 @@ impl CastWindow {
             playback_state: PlaybackState::Stopped,
             volume: 0.8,
             seek_position: 0.0,
+            duration: None,
             content_texture: None,
             content_data: Vec::new(),
+            needs_redraw: true,
         }
     }
 
@@ -71,26 +82,38 @@ impl CastWindow {
     pub fn play(&mut self) {
         if self.playback_state != PlaybackState::Playing {
             self.playback_state = PlaybackState::Playing;
+            self.needs_redraw = true;
         }
     }
 
     pub fn pause(&mut self) {
         if self.playback_state == PlaybackState::Playing {
             self.playback_state = PlaybackState::Paused;
+            self.needs_redraw = true;
         }
     }
 
     pub fn stop(&mut self) {
         self.playback_state = PlaybackState::Stopped;
         self.seek_position = 0.0;
+        self.needs_redraw = true;
     }
 
     pub fn set_volume(&mut self, volume: f32) {
         self.volume = volume.clamp(0.0, 1.0);
+        self.needs_redraw = true;
     }
 
     pub fn seek(&mut self, position: f32) {
         self.seek_position = position.clamp(0.0, 1.0);
+        self.needs_redraw = true;
+    }
+    
+    /// Format seconds as MM:SS
+    fn format_time(seconds: u64) -> String {
+        let minutes = seconds / 60;
+        let seconds = seconds % 60;
+        format!("{}:{:02}", minutes, seconds)
     }
 
     fn render_ui(&mut self, ctx: &egui::Context) {
@@ -151,11 +174,21 @@ impl CastWindow {
         egui::TopBottomPanel::bottom("seek").show(ctx, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                ui.label("0:00");
+                // Calculate and display current time and duration
+                let (current_time, total_time) = if let Some(duration) = self.duration {
+                    let current_secs = (self.seek_position * duration as f32) as u64;
+                    (Self::format_time(current_secs), Self::format_time(duration))
+                } else {
+                    ("0:00".to_string(), "0:00".to_string())
+                };
+                
+                ui.label(current_time);
                 if ui.add(egui::Slider::new(&mut self.seek_position, 0.0..=1.0).show_value(false)).changed() {
-                    // Seek position changed
+                    // User seeked to a new position - trigger actual seek operation
+                    self.seek(self.seek_position);
+                    // Note: Actual media seek would be implemented here when media backend is added
                 }
-                ui.label("0:00");
+                ui.label(total_time);
             });
             ui.add_space(4.0);
         });
@@ -224,27 +257,14 @@ impl CastWindow {
 
     fn render_audio(&self, ui: &mut egui::Ui) {
         ui.centered_and_justified(|ui| {
-            ui.heading("🎵");
-            ui.label("Audio playback");
-
-            // Audio visualizer placeholder
-            ui.add_space(20.0);
-            let painter = ui.painter();
-            let rect = ui.available_rect_before_wrap();
-            let center = rect.center();
-
-            // Simple waveform visualization
-            for i in 0..50 {
-                let x = rect.left() + (i as f32 / 50.0) * rect.width();
-                let height = (i as f32 * 0.1).sin() * 50.0 * self.volume;
-                let y1 = center.y - height;
-                let y2 = center.y + height;
-
-                painter.line_segment(
-                    [egui::pos2(x, y1), egui::pos2(x, y2)],
-                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 200, 255)),
-                );
-            }
+            ui.vertical(|ui| {
+                ui.heading("🎵");
+                ui.label("Audio playback");
+                ui.add_space(20.0);
+                ui.label("Audio visualization not yet implemented.");
+                ui.add_space(10.0);
+                ui.label(format!("Volume: {:.0}%", self.volume * 100.0));
+            });
         });
     }
 
@@ -356,6 +376,7 @@ impl ApplicationHandler for CastWindow {
                 let response = egui_state.on_window_event(window, &event);
 
                 if response.repaint {
+                    self.needs_redraw = true;
                     window.request_redraw();
                 }
             }
@@ -435,7 +456,11 @@ impl ApplicationHandler for CastWindow {
                     wgpu_state.queue.submit(std::iter::once(encoder.finish()));
                     frame.present();
 
-                    window.request_redraw();
+                    // Only request redraw if needed (content is playing or UI state changed)
+                    self.needs_redraw = false;
+                    if self.playback_state == PlaybackState::Playing {
+                        window.request_redraw();
+                    }
                 }
             }
             _ => {}

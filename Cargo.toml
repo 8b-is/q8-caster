@@ -64,7 +64,6 @@ rust_cast = "0.18"  # More maintained Chromecast library
 # wat = "1"  # For WASM testing
 
 # Screen Capture (for mirroring)
-scrap = "0.5"  # Screen capture
 xcap = "0.0.9"  # Cross-platform screen capture
 
 # Utilities

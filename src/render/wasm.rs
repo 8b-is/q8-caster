@@ -1,5 +1,13 @@
 use crate::{CasterError, Result};
 
+/// Placeholder for WebAssembly runtime execution.
+/// 
+/// TODO: Implement WASM execution using wasmer 3.x or wasmtime:
+/// - Load and compile WASM modules
+/// - Execute functions with proper argument marshalling
+/// - Handle WASI imports for system access
+/// - Manage memory imports/exports
+/// - Support async execution
 pub struct WasmRunner {
     // Placeholder for WebAssembly runtime
     // TODO: Implement with wasmer 3.x or wasmtime
@@ -10,13 +18,17 @@ impl WasmRunner {
         Ok(Self {})
     }
 
-    /// Run a WebAssembly module
+    /// Run a WebAssembly module.
+    /// 
+    /// TODO: Implement WASM execution with proper runtime initialization.
     pub async fn run(&mut self, _wasm_bytes: &[u8], _entry_point: Option<&str>) -> Result<Vec<u8>> {
         // TODO: Implement WASM execution
         Err(CasterError::Render("WebAssembly execution not yet implemented".into()))
     }
 
-    /// Run a WebAssembly module with string arguments
+    /// Run a WebAssembly module with string arguments.
+    /// 
+    /// TODO: Implement WASM execution with argument marshalling.
     pub async fn run_with_string_args(
         &mut self,
         _wasm_bytes: &[u8],
@@ -27,7 +39,9 @@ impl WasmRunner {
         Err(CasterError::Render("WebAssembly execution not yet implemented".into()))
     }
 
-    /// Get exported memory from a WASM module
+    /// Get exported memory from a WASM module.
+    /// 
+    /// TODO: Implement memory export reading.
     pub fn get_memory(&mut self, _wasm_bytes: &[u8]) -> Result<Vec<u8>> {
         // TODO: Implement memory export reading
         Err(CasterError::Render("WebAssembly memory access not yet implemented".into()))

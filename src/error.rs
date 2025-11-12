@@ -1,7 +1,6 @@
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, CasterError>;
-pub type CasterResult<T> = std::result::Result<T, CasterError>;
 
 #[derive(Error, Debug)]
 pub enum CasterError {

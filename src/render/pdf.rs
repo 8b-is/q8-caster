@@ -20,14 +20,26 @@ impl PdfRenderer {
     }
 
     pub fn render_page(&mut self, pdf_data: &[u8], page_num: u32) -> Result<DynamicImage> {
+        // Validate page number to prevent overflow when converting to u16
+        if page_num == 0 {
+            return Err(CasterError::Render("Page number must be at least 1".into()));
+        }
+        if page_num > u16::MAX as u32 {
+            return Err(CasterError::Render(format!(
+                "Page number {} exceeds maximum supported page number {}",
+                page_num,
+                u16::MAX
+            )));
+        }
+
         // Load PDF document
         let document = self
             .pdfium
             .load_pdf_from_byte_slice(pdf_data, None)
             .map_err(|e| CasterError::Render(format!("Failed to load PDF: {}", e)))?;
 
-        // Get the page
-        let page_index = page_num.saturating_sub(1) as u16; // Convert 1-based to 0-based
+        // Get the page (convert 1-based to 0-based)
+        let page_index = (page_num - 1) as u16;
         let page = document
             .pages()
             .get(page_index)
