@@ -127,6 +127,7 @@ pub struct DeviceDiscovery {
     devices: Arc<DashMap<String, DiscoveredDevice>>,
     mdns: Option<ServiceDaemon>,
     discovery_running: Arc<tokio::sync::RwLock<bool>>,
+    tasks: Vec<tokio::task::JoinHandle<()>>,
 }
 
 impl DeviceDiscovery {
@@ -135,6 +136,7 @@ impl DeviceDiscovery {
             devices: Arc::new(DashMap::new()),
             mdns: None,
             discovery_running: Arc::new(tokio::sync::RwLock::new(false)),
+            tasks: Vec::new(),
         }
     }
 
@@ -146,6 +148,11 @@ impl DeviceDiscovery {
         }
 
         info!("Starting device discovery for: {:?}", device_types);
+
+        // Abort any existing tasks before starting new ones
+        for handle in self.tasks.drain(..) {
+            handle.abort();
+        }
 
         // Create mDNS daemon
         let mdns = ServiceDaemon::new()
@@ -165,25 +172,31 @@ impl DeviceDiscovery {
             // Spawn task to handle discovered devices
             let devices = Arc::clone(&self.devices);
             let dt = device_type.clone();
+            let running_flag = Arc::clone(&self.discovery_running);
 
-            tokio::spawn(async move {
-                Self::handle_mdns_events(receiver, devices, dt).await;
+            let handle = tokio::spawn(async move {
+                Self::handle_mdns_events(receiver, devices, dt, running_flag).await;
             });
+            self.tasks.push(handle);
         }
 
         // Start UPnP/SSDP discovery if needed
         if needs_upnp {
             let devices = Arc::clone(&self.devices);
-            tokio::spawn(async move {
-                Self::discover_upnp_devices(devices).await;
+            let running_flag = Arc::clone(&self.discovery_running);
+            let handle = tokio::spawn(async move {
+                Self::discover_upnp_devices(devices, running_flag).await;
             });
+            self.tasks.push(handle);
         }
 
         // Start cleanup task
         let devices_clone = Arc::clone(&self.devices);
-        tokio::spawn(async move {
-            Self::cleanup_stale_devices(devices_clone).await;
+        let running_flag = Arc::clone(&self.discovery_running);
+        let handle = tokio::spawn(async move {
+            Self::cleanup_stale_devices(devices_clone, running_flag).await;
         });
+        self.tasks.push(handle);
 
         self.mdns = Some(mdns);
         *running = true;
@@ -197,102 +210,121 @@ impl DeviceDiscovery {
         receiver: mdns_sd::Receiver<ServiceEvent>,
         devices: Arc<DashMap<String, DiscoveredDevice>>,
         device_type: DeviceType,
+        running: Arc<tokio::sync::RwLock<bool>>,
     ) {
-        while let Ok(event) = receiver.recv_async().await {
-            match event {
-                ServiceEvent::ServiceResolved(info) => {
-                    info!("Discovered {} device: {}", device_type.to_mdns_service(), info.get_fullname());
+        while *running.read().await {
+            match receiver.recv_async().await {
+                Ok(event) => {
+                    match event {
+                        ServiceEvent::ServiceResolved(info) => {
+                            info!("Discovered {} device: {}", device_type.to_mdns_service(), info.get_fullname());
 
-                    // Extract device information
-                    let name = info.get_fullname().trim_end_matches('.').to_string();
-                    let id = format!("{}:{}", info.get_hostname(), info.get_port());
+                            // Extract device information
+                            let name = info.get_fullname().trim_end_matches('.').to_string();
+                            let id = format!("{}:{}:{}", device_type.to_mdns_service(), info.get_hostname(), info.get_port());
 
-                    // Get IP address
-                    let ip = if let Some(addr) = info.get_addresses().iter().next() {
-                        *addr
-                    } else {
-                        warn!("No IP address found for device: {}", name);
-                        continue;
-                    };
+                            // Get IP address
+                            let ip = if let Some(addr) = info.get_addresses().iter().next() {
+                                *addr
+                            } else {
+                                warn!("No IP address found for device: {}", name);
+                                continue;
+                            };
 
-                    let port = info.get_port();
+                            let port = info.get_port();
 
-                    // Create or update device
-                    if let Some(mut device) = devices.get_mut(&id) {
-                        device.update_last_seen();
-                        info!("Updated device: {} ({}:{})", name, ip, port);
-                    } else {
-                        let mut device = DiscoveredDevice::new(
-                            id.clone(),
-                            name.clone(),
-                            device_type.clone(),
-                            ip,
-                            port,
-                        );
+                            // Create or update device
+                            if let Some(mut device) = devices.get_mut(&id) {
+                                device.update_last_seen();
+                                info!("Updated device: {} ({}:{})", name, ip, port);
+                            } else {
+                                let mut device = DiscoveredDevice::new(
+                                    id.clone(),
+                                    name.clone(),
+                                    device_type.clone(),
+                                    ip,
+                                    port,
+                                );
 
-                        // Parse metadata from TXT records
-                        let mut metadata = serde_json::json!({});
-                        for property in info.get_properties().iter() {
-                            metadata[property.key()] = serde_json::json!(property.val_str());
-                        }
-                        device.metadata = metadata;
+                                // Parse metadata from TXT records
+                                let mut metadata = serde_json::json!({});
+                                for property in info.get_properties().iter() {
+                                    metadata[property.key()] = serde_json::json!(property.val_str());
+                                }
+                                device.metadata = metadata;
 
-                        // Set capabilities based on device type
-                        device.capabilities = match device_type {
-                            DeviceType::Chromecast => DeviceCapabilities {
-                                can_video: true,
-                                can_audio: true,
-                                can_image: true,
-                                can_mirror: true,
-                                supported_codecs: vec!["h264".into(), "vp8".into(), "vp9".into(), "aac".into(), "opus".into()],
-                                max_resolution: Some("4K".to_string()),
-                                protocols: vec!["cast".into()],
-                            },
-                            DeviceType::FireTv => DeviceCapabilities {
-                                can_video: true,
-                                can_audio: true,
-                                can_image: true,
-                                can_mirror: true,
-                                supported_codecs: vec!["h264".into(), "h265".into(), "aac".into()],
-                                max_resolution: Some("4K".to_string()),
-                                protocols: vec!["dial".into(), "miracast".into()],
-                            },
-                            DeviceType::AirPlay => DeviceCapabilities {
-                                can_video: true,
-                                can_audio: true,
-                                can_image: true,
-                                can_mirror: true,
-                                supported_codecs: vec!["h264".into(), "aac".into()],
-                                max_resolution: Some("1080p".to_string()),
-                                protocols: vec!["airplay".into()],
-                            },
-                            _ => DeviceCapabilities::default(),
-                        };
+                                // Set capabilities based on device type
+                                device.capabilities = match device_type {
+                                    DeviceType::Chromecast => DeviceCapabilities {
+                                        can_video: true,
+                                        can_audio: true,
+                                        can_image: true,
+                                        can_mirror: true,
+                                        supported_codecs: vec!["h264".into(), "vp8".into(), "vp9".into(), "aac".into(), "opus".into()],
+                                        max_resolution: Some("4K".to_string()),
+                                        protocols: vec!["cast".into()],
+                                    },
+                                    DeviceType::FireTv => DeviceCapabilities {
+                                        can_video: true,
+                                        can_audio: true,
+                                        can_image: true,
+                                        can_mirror: true,
+                                        supported_codecs: vec!["h264".into(), "h265".into(), "aac".into()],
+                                        max_resolution: Some("4K".to_string()),
+                                        protocols: vec!["dial".into(), "miracast".into()],
+                                    },
+                                    DeviceType::AirPlay => DeviceCapabilities {
+                                        can_video: true,
+                                        can_audio: true,
+                                        can_image: true,
+                                        can_mirror: true,
+                                        supported_codecs: vec!["h264".into(), "aac".into()],
+                                        max_resolution: Some("1080p".to_string()),
+                                        protocols: vec!["airplay".into()],
+                                    },
+                                    _ => DeviceCapabilities::default(),
+                                };
 
-                        devices.insert(id.clone(), device);
-                        info!("Added new device: {} ({}:{})", name, ip, port);
+                                devices.insert(id.clone(), device);
+                                info!("Added new device: {} ({}:{})", name, ip, port);
+                            }
+                        },
+                        ServiceEvent::ServiceFound(_, _) => {
+                            // Service found but not yet resolved, will be handled by ServiceResolved
+                        },
+                        ServiceEvent::ServiceRemoved(_, fullname) => {
+                            info!("Device removed: {}", fullname);
+                            // Note: We keep devices for a while even after removal (handled by cleanup task)
+                        },
+                        ServiceEvent::SearchStarted(_) => {
+                            info!("mDNS search started for {}", device_type.to_mdns_service());
+                        },
+                        ServiceEvent::SearchStopped(_) => {
+                            info!("mDNS search stopped for {}", device_type.to_mdns_service());
+                        },
                     }
                 },
-                ServiceEvent::ServiceRemoved(_, fullname) => {
-                    info!("Device removed: {}", fullname);
-                    // Note: We keep devices for a while even after removal (handled by cleanup task)
-                },
-                ServiceEvent::SearchStarted(_) => {
-                    info!("mDNS search started for {}", device_type.to_mdns_service());
-                },
-                ServiceEvent::SearchStopped(_) => {
-                    info!("mDNS search stopped for {}", device_type.to_mdns_service());
-                },
+                Err(_) => {
+                    // Channel closed or error - exit the loop
+                    break;
+                }
             }
         }
     }
 
     /// Cleanup stale devices
-    async fn cleanup_stale_devices(devices: Arc<DashMap<String, DiscoveredDevice>>) {
+    async fn cleanup_stale_devices(
+        devices: Arc<DashMap<String, DiscoveredDevice>>,
+        running: Arc<tokio::sync::RwLock<bool>>,
+    ) {
         let mut interval = time::interval(Duration::from_secs(30));
 
         loop {
             interval.tick().await;
+
+            if !*running.read().await {
+                break;
+            }
 
             let timeout = Duration::from_secs(300); // 5 minutes
             let mut to_remove = Vec::new();
@@ -312,13 +344,20 @@ impl DeviceDiscovery {
     }
 
     /// Discover UPnP/DLNA devices using SSDP
-    async fn discover_upnp_devices(devices: Arc<DashMap<String, DiscoveredDevice>>) {
+    async fn discover_upnp_devices(
+        devices: Arc<DashMap<String, DiscoveredDevice>>,
+        running: Arc<tokio::sync::RwLock<bool>>,
+    ) {
         info!("Starting UPnP/SSDP discovery");
 
         let mut interval = time::interval(Duration::from_secs(60));
 
         loop {
             interval.tick().await;
+
+            if !*running.read().await {
+                break;
+            }
 
             match Self::scan_upnp_devices().await {
                 Ok(discovered) => {
@@ -359,8 +398,11 @@ impl DeviceDiscovery {
 
                             // Extract IP and port from location URL
                             if let Ok(url) = url::Url::parse(location) {
-                                if let (Some(host), Some(port)) = (url.host_str(), url.port()) {
+                                if let Some(host) = url.host_str() {
                                     if let Ok(ip) = host.parse::<IpAddr>() {
+                                        let port = url.port().unwrap_or_else(|| {
+                                            if url.scheme() == "https" { 443 } else { 80 }
+                                        });
                                         let device_type = response.search_target();
                                         let name = format!("UPnP Device at {}", host);
                                         let id = format!("upnp:{}:{}", ip, port);
@@ -377,7 +419,7 @@ impl DeviceDiscovery {
                                         device.metadata = serde_json::json!({
                                             "location": location,
                                             "search_target": device_type.to_string(),
-                                            "server": response.server().unwrap_or("unknown"),
+                                            "server": response.server(),
                                         });
 
                                         discovered.push(device);
@@ -408,8 +450,11 @@ impl DeviceDiscovery {
                             let location = response.location();
 
                             if let Ok(url) = url::Url::parse(location) {
-                                if let (Some(host), Some(port)) = (url.host_str(), url.port()) {
+                                if let Some(host) = url.host_str() {
                                     if let Ok(ip) = host.parse::<IpAddr>() {
+                                        let port = url.port().unwrap_or_else(|| {
+                                            if url.scheme() == "https" { 443 } else { 80 }
+                                        });
                                         let name = format!("DLNA Renderer at {}", host);
                                         let id = format!("dlna:{}:{}", ip, port);
 
@@ -428,7 +473,7 @@ impl DeviceDiscovery {
                                         device.metadata = serde_json::json!({
                                             "location": location,
                                             "device_type": "MediaRenderer",
-                                            "server": response.server().unwrap_or("unknown"),
+                                            "server": response.server(),
                                         });
 
                                         discovered.push(device);
@@ -457,12 +502,18 @@ impl DeviceDiscovery {
             return Ok(());
         }
 
+        *running = false;
+
+        // Abort all spawned tasks
+        for handle in self.tasks.drain(..) {
+            handle.abort();
+        }
+
         if let Some(mdns) = self.mdns.take() {
             mdns.shutdown()
                 .map_err(|e| CasterError::Network(format!("Failed to shutdown mDNS: {}", e)))?;
         }
 
-        *running = false;
         info!("Device discovery stopped");
         Ok(())
     }
