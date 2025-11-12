@@ -2,6 +2,11 @@ use image::{DynamicImage, Rgba, RgbaImage};
 
 use crate::Result;
 
+/// A stateless audio renderer for generating visualizations.
+/// 
+/// This renderer doesn't maintain any internal state and all methods are pure functions
+/// operating on provided audio data. Each render method generates a new image based on
+/// the input samples or frequency data.
 pub struct AudioRenderer {
     // Audio rendering state
 }
@@ -74,11 +79,15 @@ impl AudioRenderer {
             *pixel = Rgba([20, 20, 30, 255]);
         }
 
-        if frequencies.is_empty() {
+        if frequencies.is_empty() || width == 0 {
             return Ok(DynamicImage::ImageRgba8(img));
         }
 
         let bars = width.min(frequencies.len() as u32);
+        if bars == 0 {
+            return Ok(DynamicImage::ImageRgba8(img));
+        }
+        
         let bar_width = width / bars;
 
         for i in 0..bars {

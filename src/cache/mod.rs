@@ -7,7 +7,7 @@ use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use crate::error::CasterResult;
+use crate::error::Result as CasterResult;
 use crate::{ContentSource, ContentType};
 
 /// Cached content item with metadata

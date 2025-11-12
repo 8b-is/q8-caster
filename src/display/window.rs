@@ -9,7 +9,7 @@ use winit::{
     window::Window,
 };
 
-use crate::{error::CasterResult, ContentType};
+use crate::{error::Result as CasterResult, ContentType};
 
 /// egui-based display window for casting content
 pub struct CastWindow {
@@ -30,6 +30,11 @@ pub struct CastWindow {
     content_data: Vec<u8>,
 }
 
+/// WGPU rendering state for the window.
+/// 
+/// The `Surface` has a `'static` lifetime because it is created from an `Arc<Window>` 
+/// which is also stored with the same lifetime. This coupling is implicit but safe
+/// since both the window and surface are owned by the same `CastWindow` instance.
 struct WgpuState {
     device: wgpu::Device,
     queue: wgpu::Queue,
